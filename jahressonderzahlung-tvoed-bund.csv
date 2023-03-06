@@ -1,5 +1,4 @@
- EG 1-8 ;90
- EG 9a-12 ;80
- EG 13-15;60
-"Jahressonderzahlung TvöD-Bund (in Prozent eines Monatsgehalts)
-";
+Jahressonderzahlung TVöD-Bund (in Prozent eines Monatsgehalts);
+EG 1-8 ;90
+EG 9a-12 ;80
+EG 13-15;60
