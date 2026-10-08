@@ -1,0 +1,137 @@
+# Workflow für die Datawrapper-API
+# Liest die Chart-IDs dynamisch aus datawrapper-zuordnung.csv (Spalte 2) und aktualisiert bzw. veröffentlicht die Charts.
+#
+# API-Referenz / Token-Scopes:
+# - Daten-Refresh: POST https://api.datawrapper.de/v3/charts/{ID}/data/refresh
+#   Benötigt Token-Scope: chart:read
+# - Veröffentlichen: POST https://api.datawrapper.de/v3/charts/{ID}/publish
+#   Benötigt Token-Scopes: chart:read, chart:write, theme:read, visualization:read
+#
+# Auth: Authorization: Bearer <Token> (GitHub Secret DATAWRAPPER_API_TOKEN)
+
+name: Datawrapper Refresh & Republish
+
+on:
+  push:
+    paths:
+      - '**/*.csv'
+      - '!datawrapper-zuordnung.csv'
+  schedule:
+    # Montag 04:00 UTC: Neu-Veröffentlichung, um das 30-Tage-Auto-Update-Fenster von Datawrapper zurückzusetzen
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    name: Daten-Refresh
+    runs-on: ubuntu-latest
+    # Nur bei Push (CSV-Änderung) und manuellem Dispatch, nicht bei Schedule
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      DATAWRAPPER_API_TOKEN: ${{ secrets.DATAWRAPPER_API_TOKEN }}
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Chart-Daten aktualisieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Secret-Prüfung
+          if [[ -z "${DATAWRAPPER_API_TOKEN:-}" ]]; then
+            echo "::error::DATAWRAPPER_API_TOKEN ist leer. Bitte in Repo Settings → Secrets and variables → Actions als Secret anlegen."
+            exit 1
+          fi
+
+          # Chart-IDs parsen: Header überspringen, Feld 2 nehmen, Leerzeichen und CR entfernen
+          # (Windows-Zeilenenden: tr -d '\r' vor awk)
+          IDS="$(tr -d '\r' < datawrapper-zuordnung.csv | awk -F';' 'NR>1 && NF>=2 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2 }')"
+
+          if [[ -z "$IDS" ]]; then
+            echo "::error::Keine Chart-IDs in datawrapper-zuordnung.csv gefunden."
+            exit 1
+          fi
+
+          echo "Gefundene Chart-IDs:"
+          echo "$IDS"
+
+          FAILED=0
+          for id in $IDS; do
+            # HTTP-Statuscode erfassen, 2xx gilt als Erfolg
+            if CODE="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer ${DATAWRAPPER_API_TOKEN}" \
+                "https://api.datawrapper.de/v3/charts/${id}/data/refresh")"; then
+              if [[ "$CODE" =~ ^2[0-9][0-9]$ ]]; then
+                echo "OK ${id} (HTTP ${CODE})"
+              else
+                echo "::error::${id}: HTTP ${CODE}"
+                FAILED=1
+              fi
+            else
+              echo "::error::${id}: HTTP-Anfrage fehlgeschlagen"
+              FAILED=1
+            fi
+          done
+
+          # Alle Charts wurden versucht; am Ende mit Fehlerstatus beenden, falls etwas fehlschlug
+          if [[ "$FAILED" -ne 0 ]]; then
+            exit 1
+          fi
+
+  republish:
+    name: Neu-Veröffentlichung
+    runs-on: ubuntu-latest
+    # Nur bei Schedule (wöchentlich) und manuellem Dispatch, nicht bei Push
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      DATAWRAPPER_API_TOKEN: ${{ secrets.DATAWRAPPER_API_TOKEN }}
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Charts neu veröffentlichen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Secret-Prüfung
+          if [[ -z "${DATAWRAPPER_API_TOKEN:-}" ]]; then
+            echo "::error::DATAWRAPPER_API_TOKEN ist leer. Bitte in Repo Settings → Secrets and variables → Actions als Secret anlegen."
+            exit 1
+          fi
+
+          # Chart-IDs parsen: Header überspringen, Feld 2 nehmen, Leerzeichen und CR entfernen
+          # (Windows-Zeilenenden: tr -d '\r' vor awk)
+          IDS="$(tr -d '\r' < datawrapper-zuordnung.csv | awk -F';' 'NR>1 && NF>=2 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 != "") print $2 }')"
+
+          if [[ -z "$IDS" ]]; then
+            echo "::error::Keine Chart-IDs in datawrapper-zuordnung.csv gefunden."
+            exit 1
+          fi
+
+          echo "Gefundene Chart-IDs:"
+          echo "$IDS"
+
+          FAILED=0
+          for id in $IDS; do
+            # HTTP-Statuscode erfassen, 2xx gilt als Erfolg
+            if CODE="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer ${DATAWRAPPER_API_TOKEN}" \
+                "https://api.datawrapper.de/v3/charts/${id}/publish")"; then
+              if [[ "$CODE" =~ ^2[0-9][0-9]$ ]]; then
+                echo "OK ${id} (HTTP ${CODE})"
+              else
+                echo "::error::${id}: HTTP ${CODE}"
+                FAILED=1
+              fi
+            else
+              echo "::error::${id}: HTTP-Anfrage fehlgeschlagen"
+              FAILED=1
+            fi
+          done
+
+          # Alle Charts wurden versucht; am Ende mit Fehlerstatus beenden, falls etwas fehlschlug
+          if [[ "$FAILED" -ne 0 ]]; then
+            exit 1
+          fi
