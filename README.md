@@ -55,8 +55,10 @@ Wenn du eine neue Grafik (einen neuen Chart) einbinden willst, geht das so:
 <summary>Technische Einrichtung anzeigen</summary>
 
 1. Erstelle auf [app.datawrapper.de/account/api-tokens](https://app.datawrapper.de/account/api-tokens) einen API-Token (Zugriffsschlüssel) mit den Scopes `chart:read`, `chart:write`, `theme:read` und `visualization:read`.
-2. Hinterlege den Token als Repository-Secret (geheime Variable) mit dem Namen `DATAWRAPPER_API_TOKEN` unter **Settings → Secrets and variables → Actions**.
-3. Technischer Hintergrund: Der Workflow ruft die Datawrapper-API auf (`POST /v3/charts/{ID}/data/refresh` und `POST /v3/charts/{ID}/publish`), um die Charts zu aktualisieren und neu zu veröffentlichen.
-4. Die Workflow-Datei liegt unter `.github/workflows/datawrapper-refresh.yml`.
+2. Der Token ist als **Organisations-Secret** hinterlegt: GitHub → Organisation GEW-Bund → Settings → Secrets and variables → Actions → „Secrets" → New organization secret, Name `DATAWRAPPER_API_TOKEN`. Unter **Repository access** müssen die beteiligten Repositorien eingetragen sein (aktuell: lehrkraeftebezahlung und entgelttabellen).
+3. Wichtig für die Zukunft: Wird ein weiteres Tabellen-Repository eingerichtet, muss es im Organisation-Secret unter **Repository access** ergänzt werden — sonst sieht der Workflow das Secret nicht und der Lauf schlägt fehl.
+4. Hinweis: Ein Repository-Secret mit gleichem Namen würde das Organisation-Secret überschreiben — daher keines auf Repo-Ebene anlegen.
+5. Technischer Hintergrund: Der Workflow ruft die Datawrapper-API auf (`POST /v3/charts/{ID}/data/refresh` und `POST /v3/charts/{ID}/publish`), um die Charts zu aktualisieren und neu zu veröffentlichen.
+6. Die Workflow-Datei liegt unter `.github/workflows/datawrapper-refresh.yml`.
 
 </details>
